@@ -5,7 +5,6 @@ import asyncio
 import re
 import os
 import time
-import random
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 # Page Configuration
@@ -19,27 +18,30 @@ uploaded_file = st.file_uploader("Upload your Q&A PDF", type="pdf")
 
 def safe_clean_text(text):
     """
-    Cleans text using a safe whitelist method.
-    This removes special symbols without causing syntax errors.
+    Cleans text using a Strict Filter.
+    We removed the .replace() lines that were causing errors.
+    Now we just keep safe characters.
     """
     if not text:
         return ""
     
-    # 1. Replace newlines with spaces to keep sentences flowing
+    # Replace newlines with spaces so the voice doesn't pause weirdly
     text = text.replace("\n", " ")
     
-    # 2. Remove specific markers found in your PDF
-    # We use double quotes to avoid syntax errors
-    text = text.replace("--- PAGE", "")
-    text = text.replace("
+    # STRICT WHITELIST
+    # We only keep letters, numbers, and basic punctuation.
+    # We removed the hyphen (-) to automatically clean '--- PAGE ---' headers.
+    allowed_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,?!:;"
+    
+    clean_chars = []
     for char in text:
         if char in allowed_chars:
             clean_chars.append(char)
             
-    # Join them back into a string
+    # Join the safe characters back together
     cleaned_text = "".join(clean_chars)
     
-    # 4. Remove extra spaces
+    # Remove extra spaces created by filtering
     return " ".join(cleaned_text.split())
 
 def extract_text_from_pdf(file):
@@ -54,12 +56,12 @@ def extract_text_from_pdf(file):
 
 def create_professor_script(label, main_text, explanation_text):
     """
-    Creates a 'Professor' script.
+    Creates a 'Professor' script using natural language.
     """
     # Intro
     script = f"Okay, let's move to {label}. "
     
-    # Read Question and Answer
+    # Question and Answer
     script += f"The question is: {main_text}. "
     
     # Explanation
@@ -74,7 +76,6 @@ def create_professor_script(label, main_text, explanation_text):
 def parse_pdf_to_lessons(text):
     """
     Splits text into Q&A blocks.
-    Handles 'Q1.', '1.' and other numbering formats.
     """
     # Regex to split by "Q" + number OR just number + dot
     # Matches: "Q1.", "1.", "10."
@@ -86,7 +87,7 @@ def parse_pdf_to_lessons(text):
     for chunk in chunks:
         clean_chunk = chunk.strip()
         
-        # Skip empty or junk chunks
+        # Skip empty chunks
         if len(clean_chunk) < 5:
             continue
             
@@ -122,7 +123,6 @@ def parse_pdf_to_lessons(text):
     return lessons
 
 # --- Audio Generation with Retry ---
-# Handles the '429 Too Many Requests' error automatically
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 async def generate_audio(text, filename):
     # 'en-US-ChristopherNeural' is a deep, calm male voice (Professor style)
@@ -172,7 +172,7 @@ if uploaded_file is not None:
                     # Cleanup
                     os.remove(filename)
                     
-                    # Sleep to prevent server blocking (Important!)
+                    # Sleep to prevent server blocking
                     time.sleep(2.0)
                     
                 except Exception as e:
