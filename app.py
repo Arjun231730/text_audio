@@ -33,9 +33,8 @@ def safe_clean_text(text):
     text = re.sub(r'--- PAGE \d+ ---', '', text)
     
     # 3. SAFER FILTERING: Keep only letters, numbers, and basic punctuation.
-    # We explicitly list the allowed characters.
+    # We use double quotes r"..." here to avoid the SyntaxError with single quotes.
     # valid_chars includes: a-z, A-Z, 0-9, spaces, and punctuation .,?!:;'-
-    # Everything else is removed.
     pattern = r"[^a-zA-Z0-9\s.,?!:;'\-]"
     text = re.sub(pattern, "", text)
     
@@ -129,7 +128,6 @@ async def generate_safe_audio(text, filename):
     Generates audio using Edge TTS (Microsoft Neural Voice).
     """
     # Voice: 'en-US-ChristopherNeural' (Male, Professor-like)
-    # Alt Voice: 'en-US-AriaNeural' (Female, Professional)
     voice = "en-US-ChristopherNeural" 
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(filename)
