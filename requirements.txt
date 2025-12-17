@@ -1,3 +1,5 @@
 streamlit
 pdfplumber
-gTTS
+edge-tts
+anyio
+tenacity
