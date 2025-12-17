@@ -19,6 +19,9 @@ uploaded_file = st.file_uploader("Upload your Q&A PDF", type="pdf")
 
 def clean_text(text):
     """Cleans text to ensure smooth speaking."""
+    if not text:
+        return ""
+        
     # 1. Remove citations like or [12]
     text = re.sub(r'\', '', text)
     text = re.sub(r'\[\d+\]', '', text)
@@ -27,7 +30,8 @@ def clean_text(text):
     text = re.sub(r'--- PAGE \d+ ---', '', text)
     
     # 3. Remove special chars but keep punctuation
-    # We use double quotes r"..." to avoid syntax errors with single quotes
+    # FIX: We use double quotes r"..." to safely handle the single quote inside
+    # This allows letters, numbers, spaces, and punctuation (.,?!:;'-)
     text = re.sub(r"[^a-zA-Z0-9\s.,?!:;'\-]", "", text)
     
     # 4. Remove extra whitespace
@@ -51,7 +55,8 @@ def create_professor_script(label, main_text, explanation_text):
     # 1. Intro
     script = f"Okay, let's look at {label}. "
     
-    # 2. The Question (Assumes question is at the start)
+    # 2. The Question and Answer
+    # We add a pause after the question for effect
     script += f"The question asks: {main_text}. "
     
     # 3. Transition to Explanation
