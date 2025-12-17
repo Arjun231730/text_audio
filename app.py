@@ -19,28 +19,20 @@ uploaded_file = st.file_uploader("Upload your Q&A PDF", type="pdf")
 
 def safe_clean_text(text):
     """
-    Cleans text to ensure smooth speaking, avoiding syntax errors.
+    Cleans text using a whitelist approach.
+    This avoids Regex SyntaxErrors completely.
     """
     if not text:
         return ""
         
-    # 1. Remove citations like or [12]
-    # We use empty strings to replace them
-    text = re.sub(r'\', '', text)
-    text = re.sub(r'\[\d+\]', '', text)
+    # 1. Remove specific unwanted phrases using simple replace
+    # (No regex involved here, just finding and deleting strings)
+    text = text.replace(")
     
-    # 2. Remove markers like '--- PAGE 1 ---'
-    text = re.sub(r'--- PAGE \d+ ---', '', text)
+    # 3. Remove extra spaces
+    cleaned_text = " ".join(cleaned_text.split())
     
-    # 3. SAFER FILTERING: Keep only letters, numbers, and basic punctuation.
-    # We use double quotes r"..." here to avoid the SyntaxError with single quotes.
-    # valid_chars includes: a-z, A-Z, 0-9, spaces, and punctuation .,?!:;'-
-    pattern = r"[^a-zA-Z0-9\s.,?!:;'\-]"
-    text = re.sub(pattern, "", text)
-    
-    # 4. Remove extra whitespace
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text
+    return cleaned_text
 
 def extract_text_from_pdf(file):
     """Extracts raw text from PDF using pdfplumber."""
@@ -77,18 +69,20 @@ def parse_pdf_to_lessons(text):
     Splits text into Q&A blocks and separates the 'Explanation' part.
     """
     # Split text by "Q" followed by digits (e.g. Q40., Q41.)
-    # The regex (?=Q\d+\.) allows us to split but KEEP the Q number.
+    # We use a very simple regex here that is safe from syntax errors.
     chunks = re.split(r'(?=Q\d+\.)', text)
     
     lessons = []
     
     for chunk in chunks:
-        # Filter out chunks that don't start with a Question marker
         clean_chunk = chunk.strip()
-        if not clean_chunk.startswith("Q"):
+        
+        # Only process chunks that actually start with "Q" followed by a number
+        if not re.match(r'Q\d+', clean_chunk):
             continue
             
-        # Extract Question Number (Label) like "Q1" or "Q40"
+        # Extract Question Number (Label)
+        # Finds "Q1", "Q40", etc.
         q_match = re.search(r'(Q\d+)', clean_chunk)
         label = q_match.group(1) if q_match else "Question"
         
@@ -105,7 +99,7 @@ def parse_pdf_to_lessons(text):
             q_and_a_part = clean_chunk
             explanation_part = ""
 
-        # Clean the text using our new safe function
+        # Clean the text using our new whitelist function
         clean_main = safe_clean_text(q_and_a_part)
         clean_exp = safe_clean_text(explanation_part)
         
