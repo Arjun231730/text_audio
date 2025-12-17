@@ -19,23 +19,32 @@ uploaded_file = st.file_uploader("Upload your Q&A PDF", type="pdf")
 
 def safe_clean_text(text):
     """
-    Cleans text using a whitelist approach.
-    This avoids Regex SyntaxErrors completely.
+    Cleans text using a safe whitelist method.
+    This removes special symbols without causing syntax errors.
     """
     if not text:
         return ""
-        
-    # 1. Remove specific unwanted phrases using simple replace
-    # (No regex involved here, just finding and deleting strings)
-    text = text.replace(")
     
-    # 3. Remove extra spaces
-    cleaned_text = " ".join(cleaned_text.split())
+    # 1. Replace newlines with spaces to keep sentences flowing
+    text = text.replace("\n", " ")
     
-    return cleaned_text
+    # 2. Remove specific markers found in your PDF
+    # We use single quotes here to be safe
+    text = text.replace('--- PAGE', '')
+    text = text.replace('
+    for char in text:
+        if char in allowed_chars:
+            clean_chars.append(char)
+            
+    # Join them back into a string
+    cleaned_text = "".join(clean_chars)
+    
+    # 4. Remove extra spaces created by deletions
+    # split() and join() removes all duplicate whitespace
+    return " ".join(cleaned_text.split())
 
 def extract_text_from_pdf(file):
-    """Extracts raw text from PDF using pdfplumber."""
+    """Extracts raw text from PDF."""
     all_text = ""
     with pdfplumber.open(file) as pdf:
         for page in pdf.pages:
@@ -46,137 +55,135 @@ def extract_text_from_pdf(file):
 
 def create_professor_script(label, main_text, explanation_text):
     """
-    Wraps the raw text in a 'Professor' persona script.
+    Creates a 'Professor' script.
     """
     # Intro
-    script = f"Okay, let's look at {label}. "
+    script = f"Okay, let's move to {label}. "
     
-    # Question and Answer
-    # We add a clear pause after the main text
-    script += f"The question asks: {main_text}. "
+    # Read Question and Answer
+    # We add a pause for effect
+    script += f"The question is: {main_text}. "
     
-    # Transition to Explanation
+    # Explanation
     if explanation_text:
-        script += f" Now, let's understand the details behind this. {explanation_text} "
-        script += " So, that is the core concept here. "
+        script += f" Now, let me explain the details. {explanation_text} "
+        script += " So, that is the main point to remember here. "
     else:
-        script += " That covers the complete answer for this question. "
+        script += " That covers the answer for this one. "
         
     return script
 
 def parse_pdf_to_lessons(text):
     """
-    Splits text into Q&A blocks and separates the 'Explanation' part.
+    Splits text into Q&A blocks.
+    Handles both 'Q1.' and '1.' formats.
     """
-    # Split text by "Q" followed by digits (e.g. Q40., Q41.)
-    # We use a very simple regex here that is safe from syntax errors.
-    chunks = re.split(r'(?=Q\d+\.)', text)
+    # Regex to split by "Q" + number OR just number + dot
+    # Matches: "Q1.", "1.", "10."
+    # (?=...) is a lookahead to keep the number in the chunk
+    pattern = r'(?=\b(?:Q)?\d+\.\s)'
+    chunks = re.split(pattern, text)
     
     lessons = []
     
     for chunk in chunks:
         clean_chunk = chunk.strip()
         
-        # Only process chunks that actually start with "Q" followed by a number
-        if not re.match(r'Q\d+', clean_chunk):
+        # Skip empty or junk chunks
+        if len(clean_chunk) < 5:
             continue
             
-        # Extract Question Number (Label)
-        # Finds "Q1", "Q40", etc.
-        q_match = re.search(r'(Q\d+)', clean_chunk)
-        label = q_match.group(1) if q_match else "Question"
+        # Find the label (e.g., "1" or "Q1")
+        # We look for the first number at the start
+        match = re.search(r'((?:Q)?\d+)', clean_chunk)
+        label = match.group(1) if match else "Question"
         
-        # Split into Answer and Explanation parts
+        # Split into Answer and Explanation
+        # Your PDF uses "Explanation:" or sometimes just "Answer:"
         if "Explanation:" in clean_chunk:
             parts = clean_chunk.split("Explanation:")
-            q_and_a_part = parts[0]
-            explanation_part = parts[1]
+            q_and_a = parts[0]
+            explanation = parts[1]
         elif "Answer:" in clean_chunk:
-             parts = clean_chunk.split("Answer:")
-             q_and_a_part = parts[0] + " The answer is: " + parts[1]
-             explanation_part = ""
+            parts = clean_chunk.split("Answer:")
+            q_and_a = parts[0] + " The answer is " + parts[1]
+            explanation = ""
         else:
-            q_and_a_part = clean_chunk
-            explanation_part = ""
+            q_and_a = clean_chunk
+            explanation = ""
 
-        # Clean the text using our new whitelist function
-        clean_main = safe_clean_text(q_and_a_part)
-        clean_exp = safe_clean_text(explanation_part)
+        # Clean the text
+        final_main = safe_clean_text(q_and_a)
+        final_exp = safe_clean_text(explanation)
         
-        # Create the audio script (Professor Style)
-        audio_script = create_professor_script(label, clean_main, clean_exp)
+        # Build Script
+        audio_script = create_professor_script(label, final_main, final_exp)
         
         lessons.append({
             "label": label,
-            "display": clean_chunk,
             "script": audio_script
         })
         
     return lessons
 
-# --- Rate Limit Handling ---
-# Retries up to 3 times if the server is busy (429 Error)
+# --- Audio Generation with Retry ---
+# Handles the "429 Too Many Requests" error automatically
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
-async def generate_safe_audio(text, filename):
-    """
-    Generates audio using Edge TTS (Microsoft Neural Voice).
-    """
-    # Voice: 'en-US-ChristopherNeural' (Male, Professor-like)
-    voice = "en-US-ChristopherNeural" 
+async def generate_audio(text, filename):
+    # 'en-US-ChristopherNeural' is a deep, calm male voice (Professor style)
+    voice = "en-US-ChristopherNeural"
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(filename)
 
-# --- Main App Logic ---
+# --- Main App ---
 if uploaded_file is not None:
-    with st.spinner("Analyzing PDF and preparing lectures..."):
+    with st.spinner("Processing PDF..."):
         raw_text = extract_text_from_pdf(uploaded_file)
         lessons = parse_pdf_to_lessons(raw_text)
     
-    st.success(f"Prepared {len(lessons)} detailed lessons.")
-    st.info("Note: Generating high-quality audio takes about 2-3 seconds per question.")
+    st.success(f"Found {len(lessons)} questions.")
     
     if st.button("Start Class (Generate Audio)"):
         
         progress_bar = st.progress(0)
-        status_text = st.empty()
+        status_box = st.empty()
         
         for i, lesson in enumerate(lessons):
             label = lesson["label"]
             
-            # Update Status
+            # Update Progress
             progress = (i + 1) / len(lessons)
             progress_bar.progress(progress)
-            status_text.text(f"Professor is explaining {label}...")
+            status_box.text(f"Professor is reading {label}...")
             
-            # Create a visual container for each question
             with st.container():
                 st.subheader(f"🎓 {label}")
                 
-                # Show the script text (optional, click to see)
-                with st.expander("Read Transcript"):
+                # Show Text (Optional)
+                with st.expander("Show Transcript"):
                     st.write(lesson["script"])
                 
-                filename = f"lecture_{i}.mp3"
+                filename = f"audio_{i}.mp3"
                 
                 try:
-                    # 1. Generate Audio (Async run)
-                    asyncio.run(generate_safe_audio(lesson["script"], filename))
+                    # Generate Audio
+                    asyncio.run(generate_audio(lesson["script"], filename))
                     
-                    # 2. Display Audio Player
+                    # Play Audio
                     with open(filename, 'rb') as f:
                         audio_bytes = f.read()
                         st.audio(audio_bytes, format='audio/mp3')
                     
-                    # 3. Cleanup: remove the temp file
+                    # Cleanup
                     os.remove(filename)
                     
-                    # 4. SAFETY DELAY: Wait 2 seconds to avoid "Too Many Requests" error
+                    # Sleep to prevent server blocking (Important!)
                     time.sleep(2.0)
                     
                 except Exception as e:
-                    st.error(f"Error processing {label}: {e}")
+                    st.error(f"Error on {label}: {e}")
             
             st.divider()
             
-        status_text.text("Class Dismissed! All audio generated successfully.")
+        status_box.text("Class Complete!")
         st.balloons()
