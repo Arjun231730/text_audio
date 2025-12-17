@@ -19,14 +19,18 @@ uploaded_file = st.file_uploader("Upload your Q&A PDF", type="pdf")
 
 def clean_text(text):
     """Cleans text to ensure smooth speaking."""
-    # Remove citations like or [12]
+    # 1. Remove citations like or [12]
     text = re.sub(r'\', '', text)
     text = re.sub(r'\[\d+\]', '', text)
-    # Remove markers like '--- PAGE 1 ---'
+    
+    # 2. Remove markers like '--- PAGE 1 ---'
     text = re.sub(r'--- PAGE \d+ ---', '', text)
-    # Remove special chars but keep punctuation
-    text = re.sub(r'[^a-zA-Z0-9\s.,?!:;\'"-]', '', text)
-    # Remove extra whitespace
+    
+    # 3. Remove special chars but keep punctuation
+    # We use double quotes r"..." to avoid syntax errors with single quotes
+    text = re.sub(r"[^a-zA-Z0-9\s.,?!:;'\-]", "", text)
+    
+    # 4. Remove extra whitespace
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
@@ -48,7 +52,6 @@ def create_professor_script(label, main_text, explanation_text):
     script = f"Okay, let's look at {label}. "
     
     # 2. The Question (Assumes question is at the start)
-    # We rely on the pause (.) in the text for separation
     script += f"The question asks: {main_text}. "
     
     # 3. Transition to Explanation
@@ -115,7 +118,6 @@ async def generate_safe_audio(text, filename):
     Generates audio with retry logic to handle 429 errors.
     """
     # Male voice (Professor style): en-US-ChristopherNeural
-    # Female voice (Professor style): en-US-AriaNeural
     voice = "en-US-ChristopherNeural" 
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(filename)
