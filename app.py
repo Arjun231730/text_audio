@@ -29,9 +29,9 @@ def safe_clean_text(text):
     text = text.replace("\n", " ")
     
     # 2. Remove specific markers found in your PDF
-    # We use single quotes here to be safe
-    text = text.replace('--- PAGE', '')
-    text = text.replace('
+    # We use double quotes to avoid syntax errors
+    text = text.replace("--- PAGE", "")
+    text = text.replace("
     for char in text:
         if char in allowed_chars:
             clean_chars.append(char)
@@ -39,8 +39,7 @@ def safe_clean_text(text):
     # Join them back into a string
     cleaned_text = "".join(clean_chars)
     
-    # 4. Remove extra spaces created by deletions
-    # split() and join() removes all duplicate whitespace
+    # 4. Remove extra spaces
     return " ".join(cleaned_text.split())
 
 def extract_text_from_pdf(file):
@@ -61,7 +60,6 @@ def create_professor_script(label, main_text, explanation_text):
     script = f"Okay, let's move to {label}. "
     
     # Read Question and Answer
-    # We add a pause for effect
     script += f"The question is: {main_text}. "
     
     # Explanation
@@ -76,12 +74,11 @@ def create_professor_script(label, main_text, explanation_text):
 def parse_pdf_to_lessons(text):
     """
     Splits text into Q&A blocks.
-    Handles both 'Q1.' and '1.' formats.
+    Handles 'Q1.', '1.' and other numbering formats.
     """
     # Regex to split by "Q" + number OR just number + dot
     # Matches: "Q1.", "1.", "10."
-    # (?=...) is a lookahead to keep the number in the chunk
-    pattern = r'(?=\b(?:Q)?\d+\.\s)'
+    pattern = r"(?=\b(?:Q)?\d+\.\s)"
     chunks = re.split(pattern, text)
     
     lessons = []
@@ -94,12 +91,10 @@ def parse_pdf_to_lessons(text):
             continue
             
         # Find the label (e.g., "1" or "Q1")
-        # We look for the first number at the start
-        match = re.search(r'((?:Q)?\d+)', clean_chunk)
+        match = re.search(r"((?:Q)?\d+)", clean_chunk)
         label = match.group(1) if match else "Question"
         
         # Split into Answer and Explanation
-        # Your PDF uses "Explanation:" or sometimes just "Answer:"
         if "Explanation:" in clean_chunk:
             parts = clean_chunk.split("Explanation:")
             q_and_a = parts[0]
@@ -127,7 +122,7 @@ def parse_pdf_to_lessons(text):
     return lessons
 
 # --- Audio Generation with Retry ---
-# Handles the "429 Too Many Requests" error automatically
+# Handles the '429 Too Many Requests' error automatically
 @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
 async def generate_audio(text, filename):
     # 'en-US-ChristopherNeural' is a deep, calm male voice (Professor style)
@@ -170,9 +165,9 @@ if uploaded_file is not None:
                     asyncio.run(generate_audio(lesson["script"], filename))
                     
                     # Play Audio
-                    with open(filename, 'rb') as f:
+                    with open(filename, "rb") as f:
                         audio_bytes = f.read()
-                        st.audio(audio_bytes, format='audio/mp3')
+                        st.audio(audio_bytes, format="audio/mp3")
                     
                     # Cleanup
                     os.remove(filename)
